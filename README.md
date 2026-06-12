@@ -46,7 +46,7 @@ Loop Engineering 用**收敛反馈闭环**替代线性流程：
 ### 一键安装
 
 ```bash
-npm install -g @bbji/loop-engineering-agent
+npm install -g @niuzhiwen/loop-engineering-agent
 ```
 
 安装后即可直接使用 `lea` 命令：
@@ -58,7 +58,7 @@ lea --help
 也可以免安装直接运行：
 
 ```bash
-npx @bbji/loop-engineering-agent run "开发一个用户认证系统"
+npx @niuzhiwen/loop-engineering-agent run "开发一个用户认证系统"
 ```
 
 ### 从源码安装
