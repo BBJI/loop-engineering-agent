@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import * as path from 'path';
 import { VERSION } from '../utils/constants.js';
 import { loadConfig, saveConfig, getDefaultConfig } from '../config.js';
+import type { Config } from '../model/types.js';
 import { LLMClient } from '../model/llm-client.js';
 import { WorkflowEngine } from '../engine/workflow.js';
 import { PersistenceManager } from '../engine/persistence.js';
@@ -12,6 +13,8 @@ import { SkillEngine } from '../skill/skill-engine.js';
 import { PermissionManager } from '../security/permissions.js';
 import { AutonomousLoop } from '../engine/autonomous-loop.js';
 import { ui, createSpinner, renderStatusPanel } from '../utils/ui.js';
+import { REPL } from './repl.js';
+import { needsSetup, runSetupWizard } from './setup-wizard.js';
 
 const program = new Command();
 
@@ -45,7 +48,14 @@ program
 
     try {
       const projectDir = path.resolve(opts.project);
-      const config = loadConfig(projectDir);
+
+      let config: Config;
+      if (needsSetup(projectDir)) {
+        console.log(ui.phase('首次使用，先完成基础配置：'));
+        config = await runSetupWizard(projectDir);
+      } else {
+        config = loadConfig(projectDir);
+      }
 
       if (opts.auto) config.workflow.autonomy = 'full';
       if (opts.checkpoint) {
@@ -209,11 +219,9 @@ program
     new Command('init')
       .description('初始化配置文件')
       .option('--project <path>', '项目目录', process.cwd())
-      .action((opts: any) => {
+      .action(async (opts: any) => {
         const projectDir = path.resolve(opts.project);
-        const config = getDefaultConfig();
-        saveConfig(projectDir, config);
-        console.log(ui.success('配置文件已创建: .lea/config.yaml'));
+        await runSetupWizard(projectDir);
       })
   )
   .addCommand(
@@ -257,3 +265,30 @@ program
   });
 
 program.parse();
+
+// When no subcommand is given, launch REPL
+const subCommands = ['run', 'resume', 'status', 'skills', 'config', 'compact', 'list', 'version'];
+const firstArg = process.argv[2];
+if (!firstArg || !subCommands.includes(firstArg)) {
+  if (!firstArg || firstArg.startsWith('-')) {
+    // No subcommand — start interactive REPL
+    const projectDir = process.cwd();
+
+    let config: Config;
+    if (needsSetup(projectDir)) {
+      config = await runSetupWizard(projectDir);
+    } else {
+      config = loadConfig(projectDir);
+    }
+
+    const persistence = new PersistenceManager(projectDir, config.persistence.directory);
+    persistence.init();
+    const llmClient = new LLMClient(config);
+
+    const repl = new REPL({ llmClient, config, persistence, projectDir });
+    repl.start().catch((err) => {
+      console.error(ui.fail(`REPL 错误: ${err.message}`));
+      process.exit(1);
+    });
+  }
+}

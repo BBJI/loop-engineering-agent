@@ -13,7 +13,7 @@ async function run(): Promise<void> {
 
   try {
     const client = new OpenAI({
-      baseURL: process.env.LITELLM_PROXY_URL || 'http://localhost:4000',
+      baseURL: request.proxyUrl || process.env.LITELLM_PROXY_URL || 'http://localhost:4000',
     });
 
     const systemPrompt = buildSystemPrompt(request);
@@ -25,7 +25,7 @@ async function run(): Promise<void> {
     while (retries <= request.constraints.max_retries) {
       try {
         const response = await client.chat.completions.create({
-          model: process.env.DEFAULT_MODEL || 'glm-4',
+          model: request.model || process.env.DEFAULT_MODEL || 'glm-4',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },

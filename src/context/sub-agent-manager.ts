@@ -25,6 +25,8 @@ export interface SubAgentRequest {
     max_retries: number;
     timeout_ms: number;
   };
+  model?: string;
+  proxyUrl?: string;
 }
 
 export interface SubAgentResult {
@@ -53,8 +55,17 @@ export interface SubAgentResult {
 
 export class SubAgentManager {
   private workers: Map<string, Worker> = new Map();
+  private model?: string;
+  private proxyUrl?: string;
+
+  configure(model: string, proxyUrl: string): void {
+    this.model = model;
+    this.proxyUrl = proxyUrl;
+  }
 
   async executeTask(request: SubAgentRequest): Promise<SubAgentResult> {
+    if (!request.model) request.model = this.model;
+    if (!request.proxyUrl) request.proxyUrl = this.proxyUrl;
     const workerPath = path.join(__dirname, 'sub-agent-worker.js');
 
     const worker = new Worker(workerPath, {

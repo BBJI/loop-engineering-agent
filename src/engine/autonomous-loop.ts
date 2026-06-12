@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import type { Config } from '../model/types.js';
 import type { LLMClient } from '../model/llm-client.js';
 import type { WorkflowEngine, WorkflowState } from './workflow.js';
@@ -9,8 +10,20 @@ import type { PermissionManager } from '../security/permissions.js';
 import type { Phase } from '../utils/constants.js';
 import { ui, createSpinner } from '../utils/ui.js';
 
-export class AutonomousLoop {
+export interface LoopEvents {
+  'phase:start': { phase: Phase; index: number };
+  'phase:complete': { phase: Phase; artifacts: string[] };
+  'checkpoint': { phase: Phase; artifacts: string[] };
+  'bug:found': { round: number; count: number };
+  'bug:fixed': { round: number; count: number };
+  'escalate': { reason: string };
+  'done': { state: WorkflowState };
+  'progress': { message: string };
+}
+
+export class AutonomousLoop extends EventEmitter {
   private iteration = 0;
+  private abortSignal?: AbortSignal;
 
   constructor(
     private engine: WorkflowEngine,
@@ -21,10 +34,21 @@ export class AutonomousLoop {
     private skillEngine: SkillEngine,
     private permissionManager: PermissionManager,
     private config: Config
-  ) {}
+  ) {
+    super();
+  }
+
+  setAbortSignal(signal: AbortSignal): void {
+    this.abortSignal = signal;
+  }
 
   async run(): Promise<WorkflowState> {
     while (true) {
+      if (this.abortSignal?.aborted) {
+        this.engine.getState().status = 'paused';
+        break;
+      }
+
       const state = this.engine.getState();
 
       if (state.status === 'completed' || state.status === 'failed') {
@@ -33,13 +57,22 @@ export class AutonomousLoop {
 
       const currentPhase = this.engine.getCurrentPhase();
 
+      this.emit('phase:start', { phase: currentPhase.name, index: state.currentPhaseIndex });
       console.log(ui.phase(`阶段: ${currentPhase.name}`));
       console.log('─'.repeat(40));
 
       await this.executePhase(currentPhase.name);
 
+      if (this.abortSignal?.aborted) {
+        this.engine.getState().status = 'paused';
+        break;
+      }
+
       if (this.engine.shouldPauseAtCheckpoint()) {
+        const completedPhase = this.engine.getCurrentPhase();
+        this.emit('checkpoint', { phase: completedPhase.name, artifacts: completedPhase.artifacts });
         console.log(ui.warn(`检查点: 阶段 "${currentPhase.name}" 已完成`));
+        this.engine.getState().status = 'paused';
         break;
       }
 
@@ -49,13 +82,16 @@ export class AutonomousLoop {
       } else if (this.engine.isStable()) {
         this.engine.getState().status = 'completed';
       } else if (this.engine.shouldEscalate()) {
+        this.emit('escalate', { reason: '收敛闭环不收敛' });
         console.log(ui.fail('收敛闭环不收敛，升级给用户'));
         break;
       }
     }
 
-    this.persistence.saveCheckpoint(this.engine.getState());
-    return this.engine.getState();
+    const finalState = this.engine.getState();
+    this.emit('done', { state: finalState });
+    this.persistence.saveCheckpoint(finalState);
+    return finalState;
   }
 
   private async executePhase(phase: Phase): Promise<void> {
@@ -99,6 +135,7 @@ export class AutonomousLoop {
 
     const artifacts = this.extractArtifacts(result);
     this.engine.completePhase(artifacts);
+    this.emit('phase:complete', { phase, artifacts });
 
     if (this.contextManager.needsCompression()) {
       console.log(ui.warn('上下文压缩中...'));
@@ -188,6 +225,8 @@ export class AutonomousLoop {
       const bugsFixed = result.status === 'completed' ? result.summary.tests_passed : 0;
 
       this.engine.recordBugRound(bugsFound, bugsFixed);
+      this.emit('bug:found', { round, count: bugsFound });
+      this.emit('bug:fixed', { round, count: bugsFixed });
       spinner.succeed(ui.success(`测试轮次 ${round}: 发现 ${bugsFound} Bug, 修复 ${bugsFixed}`));
 
       if (this.engine.isStable()) {

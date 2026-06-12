@@ -1,5 +1,6 @@
 import type { PersistenceManager } from '../engine/persistence.js';
 import type { Config, PermissionAction } from '../model/types.js';
+import * as readline from 'readline';
 
 export interface PermissionRequest {
   type: 'file_read' | 'file_write' | 'command';
@@ -56,6 +57,51 @@ export class PermissionManager {
         return this.evaluateAction(action, request);
       }
     }
+  }
+
+  async checkAsync(request: PermissionRequest): Promise<PermissionResult> {
+    const syncResult = this.check(request);
+    if (syncResult.allowed || syncResult.reason !== '需要用户确认') {
+      return syncResult;
+    }
+
+    return this.promptUser(request);
+  }
+
+  private async promptUser(request: PermissionRequest): Promise<PermissionResult> {
+    const typeLabel = request.type === 'file_write' ? '写入文件' : '执行命令';
+    console.log(`\n  ⚠ 权限请求: ${typeLabel} ${request.target}`);
+    console.log('  [A] 允许  [S] 始终允许  [D] 拒绝');
+
+    const answer = await this.readlinePrompt('  选择 [A]: ');
+
+    switch (answer.toLowerCase()) {
+      case 's':
+        this.grantAlways(`${request.type === 'file_write' ? 'write' : 'command'}:${request.target}`);
+        this.audit(request, 'allowed-always');
+        return { allowed: true, remember: true };
+      case 'd':
+      case 'n':
+        this.audit(request, 'denied');
+        return { allowed: false, reason: '用户拒绝' };
+      default:
+        this.audit(request, 'allowed');
+        return { allowed: true };
+    }
+  }
+
+  private readlinePrompt(prompt: string): Promise<string> {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    return new Promise((resolve) => {
+      rl.question(prompt, (answer) => {
+        rl.close();
+        resolve(answer.trim());
+      });
+    });
   }
 
   grantAlways(key: string): void {

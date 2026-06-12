@@ -147,4 +147,43 @@ export class LLMClient {
   getStats() {
     return { dailySpend: this.dailySpend, callCount: this.callCount };
   }
+
+  switchModel(newModel: string): string {
+    const old = this.config.models.default;
+    this.config.models.default = newModel;
+    return old;
+  }
+
+  switchFallback(newFallback: string): string {
+    const old = this.config.models.fallback;
+    this.config.models.fallback = newFallback;
+    return old;
+  }
+
+  updateRouting(taskType: keyof Config['models']['routing'], model: string): void {
+    this.config.models.routing[taskType] = model;
+  }
+
+  async listAvailableModels(): Promise<string[]> {
+    try {
+      const resp = await this.client.models.list();
+      return resp.data.map((m) => m.id);
+    } catch {
+      return [this.config.models.default, this.config.models.fallback];
+    }
+  }
+
+  getModelState() {
+    return {
+      default: this.config.models.default,
+      fallback: this.config.models.fallback,
+      routing: { ...this.config.models.routing },
+      budget: {
+        dailyLimit: this.config.models.cost_budget.daily_limit,
+        dailySpend: this.dailySpend,
+        perTaskLimit: this.config.models.cost_budget.per_task_limit,
+      },
+      callCount: this.callCount,
+    };
+  }
 }
