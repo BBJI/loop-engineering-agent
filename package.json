@@ -1,0 +1,43 @@
+{
+  "name": "loop-engineering-agent",
+  "version": "0.1.0",
+  "description": "Autonomous coding agent based on Loop Engineering principles",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lea": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai-agent",
+    "coding-agent",
+    "loop-engineering",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^15.0.0",
+    "inquirer": "^12.11.1",
+    "js-yaml": "^4.2.0",
+    "openai": "^6.42.0",
+    "ora": "^9.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.3",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

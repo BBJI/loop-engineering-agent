@@ -1,0 +1,150 @@
+import OpenAI from 'openai';
+import type { Config } from './types.js';
+import { ui } from '../utils/ui.js';
+
+export interface ModelCallOptions {
+  model?: string;
+  taskType?: 'simple_tasks' | 'complex_tasks' | 'code_generation' | 'code_review';
+  maxTokens?: number;
+  temperature?: number;
+  stream?: boolean;
+}
+
+export interface ModelCallResult {
+  content: string;
+  model: string;
+  tokens: { prompt: number; completion: number; total: number };
+  cost: number;
+  durationMs: number;
+}
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'glm-4': { input: 0.0001, output: 0.0001 },
+  'deepseek-v3': { input: 0.00027, output: 0.0011 },
+  'deepseek-r1': { input: 0.00055, output: 0.00219 },
+  'claude-4': { input: 0.003, output: 0.015 },
+  'gpt-4o': { input: 0.0025, output: 0.01 },
+};
+
+export class LLMClient {
+  private client: OpenAI;
+  private config: Config;
+  private dailySpend = 0;
+  private callCount = 0;
+
+  constructor(config: Config) {
+    this.config = config;
+    this.client = new OpenAI({
+      baseURL: config.litellm.proxy_url,
+      apiKey: config.litellm.api_key || 'dummy',
+    });
+  }
+
+  async chat(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    options: ModelCallOptions = {}
+  ): Promise<ModelCallResult> {
+    const model = this.selectModel(options);
+    this.checkBudget();
+
+    const start = Date.now();
+    let content = '';
+
+    if (options.stream) {
+      const stream = await this.client.chat.completions.create({
+        model,
+        messages,
+        max_tokens: options.maxTokens,
+        temperature: options.temperature,
+        stream: true,
+      });
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        content += delta;
+        process.stdout.write(delta);
+      }
+      process.stdout.write('\n');
+    } else {
+      const response = await this.client.chat.completions.create({
+        model,
+        messages,
+        max_tokens: options.maxTokens,
+        temperature: options.temperature,
+      });
+      content = response.choices[0]?.message?.content || '';
+    }
+
+    const durationMs = Date.now() - start;
+    const tokens = { prompt: 0, completion: 0, total: 0 };
+    const cost = this.estimateCost(model, tokens);
+
+    this.dailySpend += cost;
+    this.callCount++;
+
+    console.log(ui.model(
+      `${model} | ${(durationMs / 1000).toFixed(1)}s | ${tokens.total}k tokens | $${cost.toFixed(4)} | chat.completion`
+    ));
+
+    return { content, model, tokens, cost, durationMs };
+  }
+
+  async chatWithRetry(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    options: ModelCallOptions = {},
+    maxRetries = 3
+  ): Promise<ModelCallResult> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+          console.log(ui.warn(`重试 ${attempt}/${maxRetries}，${delay / 1000}s 后...`));
+          await new Promise((r) => setTimeout(r, delay));
+        }
+        return await this.chat(messages, { ...options, model: options.model || undefined });
+      } catch (err: any) {
+        lastError = err;
+        if (err?.status === 429 || err?.status >= 500) {
+          continue;
+        }
+        if (attempt === 0 && this.config.models.fallback) {
+          console.log(ui.warn(`主模型失败，尝试回退: ${this.config.models.fallback}`));
+          try {
+            return await this.chat(messages, { ...options, model: this.config.models.fallback });
+          } catch {
+            continue;
+          }
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private selectModel(options: ModelCallOptions): string {
+    if (options.model) return options.model;
+    if (options.taskType && this.config.models.routing[options.taskType]) {
+      return this.config.models.routing[options.taskType];
+    }
+    return this.config.models.default;
+  }
+
+  private checkBudget(): void {
+    const budget = this.config.models.cost_budget;
+    if (this.dailySpend >= budget.daily_limit) {
+      throw new Error(
+        `每日成本预算已耗尽: $${this.dailySpend.toFixed(2)} / $${budget.daily_limit}`
+      );
+    }
+  }
+
+  private estimateCost(model: string, tokens: { total: number }): number {
+    const pricing = MODEL_PRICING[model] || { input: 0.001, output: 0.002 };
+    return tokens.total * pricing.output / 1000;
+  }
+
+  getStats() {
+    return { dailySpend: this.dailySpend, callCount: this.callCount };
+  }
+}
