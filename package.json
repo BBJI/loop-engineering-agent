@@ -1,27 +1,50 @@
 {
-  "name": "loop-engineering-agent",
+  "name": "@bbji/loop-engineering-agent",
   "version": "0.1.0",
-  "description": "Autonomous coding agent based on Loop Engineering principles",
+  "description": "Autonomous coding agent based on Loop Engineering principles — convergent feedback loop from requirements to delivery",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "lea": "dist/cli/index.js"
   },
+  "files": [
+    "dist/",
+    "CLAUDE.md",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli/index.ts",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "ai-agent",
     "coding-agent",
     "loop-engineering",
-    "cli"
+    "cli",
+    "autonomous",
+    "llm",
+    "litellm",
+    "dev-workflow"
   ],
-  "author": "",
+  "author": "BBJI",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BBJI/loop-engineering-agent.git"
+  },
+  "homepage": "https://github.com/BBJI/loop-engineering-agent",
+  "bugs": {
+    "url": "https://github.com/BBJI/loop-engineering-agent/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^15.0.0",

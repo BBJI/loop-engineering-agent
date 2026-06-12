@@ -43,7 +43,25 @@ Loop Engineering 用**收敛反馈闭环**替代线性流程：
 - Node.js 18+
 - [LiteLLM Proxy](https://github.com/BerriAI/litellm) 运行中（用于统一接入各模型厂商）
 
-### 安装
+### 一键安装
+
+```bash
+npm install -g @bbji/loop-engineering-agent
+```
+
+安装后即可直接使用 `lea` 命令：
+
+```bash
+lea --help
+```
+
+也可以免安装直接运行：
+
+```bash
+npx @bbji/loop-engineering-agent run "开发一个用户认证系统"
+```
+
+### 从源码安装
 
 ```bash
 git clone https://github.com/BBJI/loop-engineering-agent.git
