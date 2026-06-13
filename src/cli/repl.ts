@@ -60,7 +60,7 @@ export class REPL {
     this.messages.push({ role: 'system', content: SYSTEM_PROMPT });
   }
 
-  async start(): Promise<void> {
+  async start(initialInput?: string): Promise<void> {
     this.running = true;
 
     this.initComponents();
@@ -103,6 +103,11 @@ export class REPL {
     process.on('SIGINT', () => {
       this.handleCtrlC();
     });
+
+    // If initial input was provided (e.g. `lea 帮我写个API`), process it
+    if (initialInput) {
+      await this.handleInput(initialInput);
+    }
 
     this.showPrompt();
   }

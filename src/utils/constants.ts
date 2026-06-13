@@ -1,4 +1,21 @@
-export const VERSION = '0.1.0';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function getVersion(): string {
+  try {
+    const pkgPath = join(__dirname, '..', '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+export const VERSION = getVersion();
 
 export const DEFAULT_STATE_DIR = '.lea/state';
 export const DEFAULT_CONFIG_PATH = '.lea/config.yaml';

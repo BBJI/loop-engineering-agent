@@ -16,6 +16,62 @@ import { ui, createSpinner, renderStatusPanel } from '../utils/ui.js';
 import { REPL } from './repl.js';
 import { needsSetup, runSetupWizard } from './setup-wizard.js';
 
+const SUB_COMMANDS = ['run', 'resume', 'status', 'skills', 'config', 'compact', 'list', 'version'];
+
+/**
+ * Determine if we should enter REPL mode (no subcommand given).
+ * REPL mode: `lea` or `lea -` or any arg that is not a known subcommand
+ * and does not start with `-` (which are flags like --version, --help).
+ */
+function shouldEnterREPL(): boolean {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return true;
+
+  const first = args[0];
+  // Flags like --version, --help — let Commander handle these
+  if (first.startsWith('-')) return false;
+  // Known subcommands — let Commander handle
+  if (SUB_COMMANDS.includes(first)) return false;
+
+  // Unknown positional arg — treat as chat input for REPL
+  return true;
+}
+
+// --- REPL entry ---
+async function startREPL(initialInput?: string): Promise<void> {
+  const projectDir = process.cwd();
+
+  let config: Config;
+  try {
+    if (needsSetup(projectDir)) {
+      console.log(ui.phase('首次使用，先完成基础配置：'));
+      config = await runSetupWizard(projectDir);
+    } else {
+      config = loadConfig(projectDir);
+    }
+  } catch (err: any) {
+    console.error(ui.fail(`配置加载失败: ${err.message}`));
+    console.error(ui.dim('提示: 运行 lea config init 初始化配置'));
+    process.exit(1);
+  }
+
+  const persistence = new PersistenceManager(projectDir, config.persistence.directory);
+  persistence.init();
+
+  let llmClient: LLMClient;
+  try {
+    llmClient = new LLMClient(config);
+  } catch (err: any) {
+    console.error(ui.fail(`LLM 客户端初始化失败: ${err.message}`));
+    console.error(ui.dim('提示: 检查 .lea/config.yaml 中的模型和 Proxy 配置'));
+    process.exit(1);
+  }
+
+  const repl = new REPL({ llmClient, config, persistence, projectDir });
+  await repl.start(initialInput);
+}
+
+// --- Commander setup ---
 const program = new Command();
 
 program
@@ -264,31 +320,15 @@ program
     }
   });
 
-program.parse();
-
-// When no subcommand is given, launch REPL
-const subCommands = ['run', 'resume', 'status', 'skills', 'config', 'compact', 'list', 'version'];
-const firstArg = process.argv[2];
-if (!firstArg || !subCommands.includes(firstArg)) {
-  if (!firstArg || firstArg.startsWith('-')) {
-    // No subcommand — start interactive REPL
-    const projectDir = process.cwd();
-
-    let config: Config;
-    if (needsSetup(projectDir)) {
-      config = await runSetupWizard(projectDir);
-    } else {
-      config = loadConfig(projectDir);
-    }
-
-    const persistence = new PersistenceManager(projectDir, config.persistence.directory);
-    persistence.init();
-    const llmClient = new LLMClient(config);
-
-    const repl = new REPL({ llmClient, config, persistence, projectDir });
-    repl.start().catch((err) => {
-      console.error(ui.fail(`REPL 错误: ${err.message}`));
-      process.exit(1);
-    });
-  }
+// --- Main entry: decide REPL vs Commander ---
+if (shouldEnterREPL()) {
+  // Collect any positional args as initial chat input for the REPL
+  const initialArgs = process.argv.slice(2);
+  const initialInput = initialArgs.length > 0 ? initialArgs.join(' ') : undefined;
+  startREPL(initialInput).catch((err) => {
+    console.error(ui.fail(`REPL 错误: ${err.message}`));
+    process.exit(1);
+  });
+} else {
+  program.parse();
 }
