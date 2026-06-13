@@ -237,7 +237,16 @@ export class REPL {
       this.statusBar.update({ cost: `$${stats.dailySpend.toFixed(2)}` });
     } catch (err: any) {
       if (!err.message?.includes('aborted')) {
-        console.log(ui.fail(`错误: ${err.message}`));
+        const msg = err.message || String(err);
+        if (msg.includes('Connection error') || msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
+          console.log(ui.fail(`无法连接到模型服务: ${this.session.config.litellm.proxy_url}`));
+          console.log(ui.dim('  请检查:'));
+          console.log(ui.dim('  1. LiteLLM Proxy 是否已启动'));
+          console.log(ui.dim('  2. Proxy 地址是否正确（可用 /config proxy_url 修改）'));
+          console.log(ui.dim('  3. API Key 是否有效（可用 /config api_key 修改）'));
+        } else {
+          console.log(ui.fail(`错误: ${msg}`));
+        }
       }
     } finally {
       this.abortController = null;

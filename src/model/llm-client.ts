@@ -34,8 +34,13 @@ export class LLMClient {
 
   constructor(config: Config) {
     this.config = config;
+    // OpenAI SDK expects baseURL to end with /v1 (e.g. http://localhost:4000/v1)
+    let baseURL = config.litellm.proxy_url.replace(/\/+$/, '');
+    if (!baseURL.endsWith('/v1')) {
+      baseURL += '/v1';
+    }
     this.client = new OpenAI({
-      baseURL: config.litellm.proxy_url,
+      baseURL,
       apiKey: config.litellm.api_key || 'dummy',
     });
   }
