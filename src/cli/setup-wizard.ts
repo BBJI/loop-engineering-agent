@@ -64,17 +64,14 @@ export async function runSetupWizard(projectDir: string): Promise<Config> {
       when: (a) => a.provider === 'litellm',
     },
     {
-      type: 'list',
-      name: 'directProvider',
-      message: '选择模型厂商:',
-      choices: [
-        { name: '智谱 (GLM-4)', value: 'zhipu' },
-        { name: 'DeepSeek', value: 'deepseek' },
-        { name: 'OpenAI', value: 'openai' },
-        { name: 'Anthropic (Claude)', value: 'anthropic' },
-        { name: '其他（OpenAI 兼容 API）', value: 'other' },
-      ],
+      type: 'input',
+      name: 'directBaseUrl',
+      message: 'API Base URL（如 https://api.openai.com/v1）:',
+      default: 'https://api.openai.com/v1',
       when: (a) => a.provider === 'direct',
+      validate: (v: string) => {
+        try { new URL(v); return true; } catch { return '请输入有效的 URL'; }
+      },
     },
     {
       type: 'input',
@@ -85,49 +82,15 @@ export async function runSetupWizard(projectDir: string): Promise<Config> {
     },
     {
       type: 'input',
-      name: 'directBaseUrl',
-      message: 'API Base URL:',
-      default: (a: SetupAnswers) => PROVIDER_URLS[a.directProvider!] || 'https://api.openai.com/v1',
-      when: (a) => a.provider === 'direct' && (a.directProvider === 'other'),
-      validate: (v: string) => {
-        try { new URL(v); return true; } catch { return '请输入有效的 URL'; }
-      },
-    },
-    {
-      type: 'list',
       name: 'defaultModel',
-      message: '选择默认模型:',
-      choices: (a: SetupAnswers) => {
-        if (a.provider === 'litellm') {
-          return [
-            { name: 'glm-4          智谱 · 通用', value: 'glm-4' },
-            { name: 'deepseek-v3    DeepSeek · 代码生成', value: 'deepseek-v3' },
-            { name: 'deepseek-r1    DeepSeek · 推理', value: 'deepseek-r1' },
-            { name: 'claude-4       Anthropic · 代码审查', value: 'claude-4' },
-            { name: 'gpt-4o         OpenAI · 通用', value: 'gpt-4o' },
-          ];
-        }
-        return PROVIDER_MODELS[a.directProvider!] || [
-          { name: 'glm-4', value: 'glm-4' },
-        ];
-      },
-      default: (a: SetupAnswers) => {
-        if (a.provider === 'litellm') return 'glm-4';
-        return PROVIDER_MODELS[a.directProvider!]?.[0]?.value || 'glm-4';
-      },
+      message: '默认模型名称（如 gpt-4o, glm-4, deepseek-v3）:',
+      default: 'glm-4',
+      validate: (v: string) => v.trim() ? true : '模型名称不能为空',
     },
     {
-      type: 'list',
+      type: 'input',
       name: 'fallbackModel',
-      message: '选择回退模型（主模型失败时使用）:',
-      choices: (a: SetupAnswers) => {
-        const models = a.provider === 'litellm'
-          ? ['deepseek-v3', 'glm-4', 'deepseek-r1', 'claude-4', 'gpt-4o']
-          : (PROVIDER_MODELS[a.directProvider!] || [{ value: 'glm-4' }]).map((m: any) => m.value);
-        return models
-          .filter((m: string) => m !== a.defaultModel)
-          .map((m: string) => ({ name: m, value: m }));
-      },
+      message: '回退模型名称（主模型失败时使用，留空则无回退）:',
       default: 'deepseek-v3',
     },
     {
@@ -154,7 +117,7 @@ export async function runSetupWizard(projectDir: string): Promise<Config> {
   console.log('');
   console.log(ui.success('  配置完成！已保存到 .lea/config.yaml'));
   console.log(`  默认模型: ${ui.model(config.models.default)}`);
-  console.log(`  回退模型: ${ui.model(config.models.fallback)}`);
+  console.log(`  回退模型: ${ui.model(config.models.fallback || '无')}`);
   console.log(`  接入方式: ${config.litellm.proxy_url}`);
   if (config.litellm.api_key) {
     console.log(`  API Key:  ${config.litellm.api_key.substring(0, 4)}${'*'.repeat(Math.max(0, config.litellm.api_key.length - 4))}`);
@@ -169,41 +132,12 @@ interface SetupAnswers {
   provider: 'litellm' | 'direct' | 'skip';
   proxyUrl?: string;
   litellmApiKey?: string;
-  directProvider?: string;
-  directApiKey?: string;
   directBaseUrl?: string;
+  directApiKey?: string;
   defaultModel: string;
   fallbackModel: string;
   autonomy: 'full' | 'semi' | 'manual';
 }
-
-const PROVIDER_URLS: Record<string, string> = {
-  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
-  deepseek: 'https://api.deepseek.com/v1',
-  openai: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com/v1',
-};
-
-const PROVIDER_MODELS: Record<string, { name: string; value: string }[]> = {
-  zhipu: [
-    { name: 'glm-4          通用', value: 'glm-4' },
-    { name: 'glm-4-flash    快速', value: 'glm-4-flash' },
-  ],
-  deepseek: [
-    { name: 'deepseek-v3    代码生成', value: 'deepseek-v3' },
-    { name: 'deepseek-r1    推理', value: 'deepseek-r1' },
-  ],
-  openai: [
-    { name: 'gpt-4o         通用', value: 'gpt-4o' },
-    { name: 'gpt-4o-mini    快速', value: 'gpt-4o-mini' },
-  ],
-  anthropic: [
-    { name: 'claude-4       代码审查', value: 'claude-4' },
-  ],
-  other: [
-    { name: 'custom-model', value: 'custom-model' },
-  ],
-};
 
 function buildConfig(answers: SetupAnswers): Config {
   const config: Config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -212,13 +146,12 @@ function buildConfig(answers: SetupAnswers): Config {
     config.litellm.proxy_url = answers.proxyUrl || 'http://localhost:4000';
     config.litellm.api_key = answers.litellmApiKey || undefined;
   } else if (answers.provider === 'direct') {
-    const baseUrl = answers.directBaseUrl || PROVIDER_URLS[answers.directProvider!] || 'https://api.openai.com/v1';
-    config.litellm.proxy_url = baseUrl;
+    config.litellm.proxy_url = answers.directBaseUrl || 'https://api.openai.com/v1';
     config.litellm.api_key = answers.directApiKey;
   }
 
-  config.models.default = answers.defaultModel;
-  config.models.fallback = answers.fallbackModel;
+  config.models.default = answers.defaultModel.trim();
+  config.models.fallback = answers.fallbackModel.trim() || config.models.fallback;
   config.workflow.autonomy = answers.autonomy;
 
   return config;
