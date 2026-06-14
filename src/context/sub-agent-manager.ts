@@ -127,28 +127,18 @@ export class SubAgentManager {
     const results: SubAgentResult[] = [];
     const queue = [...requests];
 
-    async function runNext(
-      manager: SubAgentManager,
-      resolve: () => void
-    ): Promise<void> {
-      if (queue.length === 0) {
-        resolve();
-        return;
-      }
+    async function runNext(manager: SubAgentManager): Promise<void> {
+      if (queue.length === 0) return;
 
       const request = queue.shift()!;
       const result = await manager.executeTask(request);
       results.push(result);
-      await runNext(manager, resolve);
+      await runNext(manager);
     }
 
-    await new Promise<void>((resolve) => {
-      const concurrency = Math.min(maxConcurrency, requests.length);
-      const runners = Array.from({ length: concurrency }, () =>
-        runNext(this, resolve)
-      );
-      Promise.all(runners).then(() => resolve());
-    });
+    const concurrency = Math.min(maxConcurrency, requests.length);
+    const runners = Array.from({ length: concurrency }, () => runNext(this));
+    await Promise.all(runners);
 
     return results;
   }

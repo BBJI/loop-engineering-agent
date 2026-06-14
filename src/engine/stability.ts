@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { PersistenceManager } from '../engine/persistence.js';
 import type { ContextManager } from '../context/compression.js';
 import type { SubAgentManager } from '../context/sub-agent-manager.js';

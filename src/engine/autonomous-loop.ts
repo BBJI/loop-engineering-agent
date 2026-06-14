@@ -148,6 +148,7 @@ export class AutonomousLoop extends EventEmitter {
 
   private async executeDevPhase(spinner: any): Promise<void> {
     const state = this.engine.getState();
+    let anySuccess = false;
 
     for (let iter = 1; iter <= state.maxIterations; iter++) {
       this.iteration = iter;
@@ -180,6 +181,7 @@ export class AutonomousLoop extends EventEmitter {
       const result = await this.subAgentManager.executeTask(taskRequest);
 
       if (result.status === 'completed') {
+        anySuccess = true;
         spinner.succeed(ui.success(`开发迭代 ${iter} 完成`));
         console.log(ui.agent(`子代理: ${result.summary.description}`));
       } else {
@@ -189,7 +191,11 @@ export class AutonomousLoop extends EventEmitter {
       this.persistence.saveCheckpoint(this.engine.getState());
     }
 
-    this.engine.completePhase([]);
+    if (anySuccess) {
+      this.engine.completePhase([]);
+    } else {
+      throw new Error('所有开发迭代均失败');
+    }
   }
 
   private async executeTestPhase(spinner: any): Promise<void> {
@@ -239,6 +245,7 @@ export class AutonomousLoop extends EventEmitter {
 
       if (this.engine.shouldEscalate()) {
         console.log(ui.warn('Bug 不收敛，需要人工介入'));
+        this.engine.setStatus('failed');
         return;
       }
     }

@@ -178,14 +178,14 @@ export class WorkflowEngine {
     const round = this.state.bugHistory.length + 1;
     const prevRemaining = this.state.bugHistory.length > 0
       ? this.state.bugHistory[this.state.bugHistory.length - 1].remaining
-      : found;
-    const remaining = prevRemaining - fixed + (found - (this.state.bugHistory.length > 0 ? 0 : found));
+      : 0;
+    const remaining = Math.max(0, prevRemaining + found - fixed);
 
     this.state.bugHistory.push({
       round,
       found,
       fixed,
-      remaining: Math.max(0, found - fixed + (prevRemaining - found > 0 ? prevRemaining - found : 0)),
+      remaining,
     });
   }
 

@@ -114,16 +114,19 @@ describe('Integration: Workflow lifecycle', () => {
   test('Bug 收敛闭环', () => {
     const engine = new WorkflowEngine(tmpDir, '收敛测试', DEFAULT_CONFIG);
 
-    // 模拟收敛过程
-    engine.recordBugRound(8, 5);  // 8 found, 5 fixed
+    // remaining 严格递减: 4 → 3 → 2 → 1 → 0 → 0 → 0
+    engine.recordBugRound(10, 6); // remaining = 4
     expect(engine.isConverging()).toBe(true);
 
-    engine.recordBugRound(4, 3);
+    engine.recordBugRound(3, 4);  // remaining = 3
     expect(engine.isConverging()).toBe(true);
 
-    engine.recordBugRound(1, 1);
+    engine.recordBugRound(1, 2);  // remaining = 2
     expect(engine.isConverging()).toBe(true);
 
+    engine.recordBugRound(0, 0);  // remaining = 2
+    engine.recordBugRound(0, 1);  // remaining = 1
+    engine.recordBugRound(0, 1);  // remaining = 0
     engine.recordBugRound(0, 0);
     engine.recordBugRound(0, 0);
     engine.recordBugRound(0, 0);
@@ -133,9 +136,9 @@ describe('Integration: Workflow lifecycle', () => {
   test('Bug 不收敛升级', () => {
     const engine = new WorkflowEngine(tmpDir, '不收敛测试', DEFAULT_CONFIG);
 
-    engine.recordBugRound(5, 2);
-    engine.recordBugRound(5, 2);
-    engine.recordBugRound(5, 2);
+    engine.recordBugRound(2, 1);  // remaining = 1
+    engine.recordBugRound(3, 1);  // remaining = 3
+    engine.recordBugRound(4, 1);  // remaining = 6
 
     expect(engine.shouldEscalate()).toBe(true);
   });

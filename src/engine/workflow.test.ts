@@ -58,17 +58,22 @@ describe('WorkflowEngine', () => {
   });
 
   test('Bug 收敛检测', () => {
-    engine.recordBugRound(8, 5);
-    expect(engine.isConverging()).toBe(true);
+    // remaining 严格递减: 4 → 3 → 2
+    engine.recordBugRound(10, 6); // remaining = 4
+    expect(engine.isConverging()).toBe(true); // <2 entries
 
-    engine.recordBugRound(4, 3);
-    expect(engine.isConverging()).toBe(true);
+    engine.recordBugRound(3, 4);  // remaining = 3
+    expect(engine.isConverging()).toBe(true); // [4,3] → 3 < 4
+
+    engine.recordBugRound(1, 2);  // remaining = 2
+    expect(engine.isConverging()).toBe(true); // [4,3,2] → strictly decreasing
   });
 
   test('Bug 不收敛时升级', () => {
-    engine.recordBugRound(5, 2);
-    engine.recordBugRound(5, 2);
-    engine.recordBugRound(5, 2);
+    // Each round: remaining increases (not converging)
+    engine.recordBugRound(2, 1);  // remaining = 1
+    engine.recordBugRound(3, 1);  // remaining = 3
+    engine.recordBugRound(4, 1);  // remaining = 6
     expect(engine.shouldEscalate()).toBe(true);
   });
 

@@ -34,6 +34,7 @@ async function run(): Promise<void> {
         });
 
         content = response.choices[0]?.message?.content || '';
+        totalTokens = response.usage?.total_tokens || 0;
         modelCalls++;
         break;
       } catch (err: any) {
@@ -46,11 +47,10 @@ async function run(): Promise<void> {
       }
     }
 
-    const filesCreated = extractFileOperations(content, 'create');
-    const filesModified = extractFileOperations(content, 'modify');
+    const { created, modified } = extractFileOperations(content);
 
-    for (const fileOp of [...filesCreated, ...filesModified]) {
-      if (request.permissions.allow_write === 'auto') {
+    for (const fileOp of [...created, ...modified]) {
+      if (request.permissions.allow_write === 'auto' || request.permissions.allow_write === 'ask') {
         const dir = fileOp.path.substring(0, fileOp.path.lastIndexOf('/'));
         if (dir && !fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
@@ -64,8 +64,8 @@ async function run(): Promise<void> {
       status: 'completed',
       summary: {
         description: content.substring(0, 200),
-        files_modified: filesModified.map((f) => f.path),
-        files_created: filesCreated.map((f) => f.path),
+        files_modified: modified.map((f) => f.path),
+        files_created: created.map((f) => f.path),
         files_deleted: [],
         tests_passed: 0,
         tests_failed: 0,
@@ -145,21 +145,30 @@ function buildUserPrompt(req: SubAgentRequest): string {
 }
 
 function extractFileOperations(
-  content: string,
-  _type: 'create' | 'modify'
-): { path: string; content: string }[] {
-  const files: { path: string; content: string }[] = [];
-  const regex = /###\s*FILE:\s*(.+)\n```[\s\S]*?\n([\s\S]*?)```/g;
-  let match;
+  content: string
+): { created: { path: string; content: string }[]; modified: { path: string; content: string }[] } {
+  const created: { path: string; content: string }[] = [];
+  const modified: { path: string; content: string }[] = [];
 
-  while ((match = regex.exec(content)) !== null) {
-    files.push({
-      path: match[1].trim(),
-      content: match[2].trim(),
-    });
+  const createRegex = /###\s*(?:CREATE|NEW\s+FILE|FILE):\s*(.+)\n```[\s\S]*?\n([\s\S]*?)```/g;
+  const modifyRegex = /###\s*(?:MODIFY|UPDATE|EDIT):\s*(.+)\n```[\s\S]*?\n([\s\S]*?)```/g;
+
+  let match;
+  while ((match = createRegex.exec(content)) !== null) {
+    created.push({ path: match[1].trim(), content: match[2].trim() });
+  }
+  while ((match = modifyRegex.exec(content)) !== null) {
+    modified.push({ path: match[1].trim(), content: match[2].trim() });
   }
 
-  return files;
+  if (created.length === 0 && modified.length === 0) {
+    const fallbackRegex = /###\s*FILE:\s*(.+)\n```[\s\S]*?\n([\s\S]*?)```/g;
+    while ((match = fallbackRegex.exec(content)) !== null) {
+      created.push({ path: match[1].trim(), content: match[2].trim() });
+    }
+  }
+
+  return { created, modified };
 }
 
 run();

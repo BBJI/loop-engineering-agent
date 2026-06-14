@@ -23,6 +23,15 @@ export class PersistenceManager {
     }
   }
 
+  private safeRename(from: string, to: string): void {
+    try {
+      fs.unlinkSync(to);
+    } catch {
+      // File may not exist, that's fine
+    }
+    fs.renameSync(from, to);
+  }
+
   saveCheckpoint(state: WorkflowState): string {
     this.init();
 
@@ -37,7 +46,7 @@ export class PersistenceManager {
     const tmpPath = filePath + '.tmp';
 
     fs.writeFileSync(tmpPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
-    fs.renameSync(tmpPath, filePath);
+    this.safeRename(tmpPath, filePath);
 
     return filePath;
   }
@@ -103,8 +112,10 @@ export class PersistenceManager {
   savePhaseHistory(phaseName: string, history: object[]): void {
     this.init();
     const filePath = path.join(this.stateDir, `phase-${phaseName}-history.jsonl`);
-    const line = JSON.stringify({ timestamp: new Date().toISOString(), ...history }) + '\n';
-    fs.appendFileSync(filePath, line, 'utf-8');
+    for (const entry of history) {
+      const line = JSON.stringify({ timestamp: new Date().toISOString(), ...entry }) + '\n';
+      fs.appendFileSync(filePath, line, 'utf-8');
+    }
   }
 
   saveAuditLog(entry: {
@@ -132,7 +143,7 @@ export class PersistenceManager {
     const filePath = path.join(this.stateDir, 'heartbeat.json');
     const tmpPath = filePath + '.tmp';
     fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tmpPath, filePath);
+    this.safeRename(tmpPath, filePath);
   }
 
   loadHeartbeat(): typeof undefined | {
