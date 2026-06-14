@@ -1,0 +1,7 @@
+{
+  "watch": ["src"],
+  "ext": "ts",
+  "ignore": [".lea", "dist", "node_modules"],
+  "exec": "tsx src/cli/index.ts",
+  "stdin": true
+}
