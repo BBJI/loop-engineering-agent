@@ -60,6 +60,7 @@ export class LLMClient {
     let content = '';
 
     let reasoning = '';
+    let tokens = { prompt: 0, completion: 0, total: 0 };
 
     if (options.stream) {
       const stream = await this.client.chat.completions.create({
@@ -68,10 +69,16 @@ export class LLMClient {
         max_tokens: options.maxTokens,
         temperature: options.temperature,
         stream: true,
+        stream_options: { include_usage: true },
       });
 
       let inReasoning = false;
+      let streamUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
       for await (const chunk of stream) {
+        // Capture usage from the final chunk
+        if (chunk.usage) {
+          streamUsage = chunk.usage;
+        }
         const delta = chunk.choices[0]?.delta as any;
         // Handle reasoning_content for reasoning models (e.g. glm-5.1, deepseek-r1)
         if (delta?.reasoning_content) {
@@ -92,6 +99,11 @@ export class LLMClient {
         }
       }
       process.stdout.write('\n');
+      tokens = {
+        prompt: streamUsage?.prompt_tokens || 0,
+        completion: streamUsage?.completion_tokens || 0,
+        total: streamUsage?.total_tokens || 0,
+      };
     } else {
       const response = await this.client.chat.completions.create({
         model,
@@ -108,6 +120,11 @@ export class LLMClient {
       if (content) {
         process.stdout.write(content + '\n');
       }
+      tokens = {
+        prompt: response.usage?.prompt_tokens || 0,
+        completion: response.usage?.completion_tokens || 0,
+        total: response.usage?.total_tokens || 0,
+      };
     }
 
     const durationMs = Date.now() - start;
@@ -116,7 +133,6 @@ export class LLMClient {
       console.log(ui.warn('模型返回了空响应，请检查 API 地址是否为 OpenAI 兼容端点'));
     }
 
-    const tokens = { prompt: 0, completion: 0, total: 0 };
     const cost = this.estimateCost(model, tokens);
 
     this.dailySpend += cost;

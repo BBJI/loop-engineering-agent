@@ -117,7 +117,7 @@ export class REPL {
     this.subAgentManager = new SubAgentManager();
     this.subAgentManager.configure(this.session.config.models.default, this.session.config.litellm.proxy_url);
     this.skillEngine = new SkillEngine(
-      this.session.config.skills.directory.replace('~', process.env.HOME || '~'),
+      this.session.config.skills.directory.replace('~', process.env.HOME || process.env.USERPROFILE || '~'),
       this.session.llmClient
     );
     this.skillEngine.loadSkills();
@@ -198,6 +198,7 @@ export class REPL {
 
     try {
       this.abortController = new AbortController();
+      this.loop.setAbortSignal(this.abortController.signal);
       const finalState = await this.loop.run();
 
       this.statusBar.update({

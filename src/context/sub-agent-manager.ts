@@ -72,9 +72,11 @@ export class SubAgentManager {
     if (!request.proxyUrl) request.proxyUrl = this.proxyUrl;
     const workerPath = path.join(__dirname, 'sub-agent-worker.js');
 
-    const worker = new Worker(workerPath, {
+    const workerOptions: Record<string, unknown> = {
       workerData: request,
-    });
+      type: 'module',
+    };
+    const worker = new Worker(workerPath, workerOptions as any);
 
     this.workers.set(request.task_id, worker);
 

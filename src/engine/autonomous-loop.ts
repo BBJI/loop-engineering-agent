@@ -45,7 +45,7 @@ export class AutonomousLoop extends EventEmitter {
   async run(): Promise<WorkflowState> {
     while (true) {
       if (this.abortSignal?.aborted) {
-        this.engine.getState().status = 'paused';
+        this.engine.setStatus('paused');
         break;
       }
 
@@ -64,7 +64,7 @@ export class AutonomousLoop extends EventEmitter {
       await this.executePhase(currentPhase.name);
 
       if (this.abortSignal?.aborted) {
-        this.engine.getState().status = 'paused';
+        this.engine.setStatus('paused');
         break;
       }
 
@@ -72,15 +72,17 @@ export class AutonomousLoop extends EventEmitter {
         const completedPhase = this.engine.getCurrentPhase();
         this.emit('checkpoint', { phase: completedPhase.name, artifacts: completedPhase.artifacts });
         console.log(ui.warn(`检查点: 阶段 "${currentPhase.name}" 已完成`));
-        this.engine.getState().status = 'paused';
+        this.engine.setStatus('paused');
         break;
       }
 
       const canAdvance = this.engine.canAdvance();
       if (canAdvance.can) {
         this.engine.advancePhase();
+      } else if (this.engine.isLastPhaseCompleted()) {
+        this.engine.setStatus('completed');
       } else if (this.engine.isStable()) {
-        this.engine.getState().status = 'completed';
+        this.engine.setStatus('completed');
       } else if (this.engine.shouldEscalate()) {
         this.emit('escalate', { reason: '收敛闭环不收敛' });
         console.log(ui.fail('收敛闭环不收敛，升级给用户'));

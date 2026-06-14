@@ -94,7 +94,12 @@ export class WorkflowEngine {
   }
 
   getState(): WorkflowState {
-    return { ...this.state };
+    return JSON.parse(JSON.stringify(this.state));
+  }
+
+  setStatus(status: WorkflowState['status']): void {
+    this.state.status = status;
+    this.state.updatedAt = new Date().toISOString();
   }
 
   getCurrentPhase(): WorkflowPhase {
@@ -205,6 +210,12 @@ export class WorkflowEngine {
 
     const recent = history.slice(-stabilityRounds);
     return recent.every((h) => h.remaining === 0);
+  }
+
+  isLastPhaseCompleted(): boolean {
+    const current = this.getCurrentPhase();
+    const isLast = this.state.currentPhaseIndex === this.state.phases.length - 1;
+    return isLast && current.status === 'completed';
   }
 
   shouldEscalate(): boolean {
