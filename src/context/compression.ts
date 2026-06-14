@@ -126,9 +126,16 @@ export class ContextManager {
   }
 
   buildContextForPhase(targetPhase: Phase): string {
+    const phaseOrder: Phase[] = ['req', 'design', 'review', 'task', 'dev', 'test'];
+    const targetIndex = phaseOrder.indexOf(targetPhase);
     const parts: string[] = [];
 
     for (const [phase, summary] of this.summaries) {
+      // Only include summaries from phases that have already completed
+      // (i.e., phases before the target phase)
+      const phaseIndex = phaseOrder.indexOf(phase);
+      if (phaseIndex >= targetIndex) continue;
+
       parts.push(`## ${phase} Phase Summary`);
       parts.push(`Completed: ${summary.completed_at}`);
       parts.push(`Artifacts: ${summary.artifacts.map((a) => a.path).join(', ') || 'none'}`);

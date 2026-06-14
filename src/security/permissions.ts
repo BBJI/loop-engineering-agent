@@ -1,6 +1,5 @@
 import type { PersistenceManager } from '../engine/persistence.js';
 import type { Config, PermissionAction } from '../model/types.js';
-import * as readline from 'readline';
 
 export interface PermissionRequest {
   type: 'file_read' | 'file_write' | 'command';
@@ -91,16 +90,17 @@ export class PermissionManager {
   }
 
   private readlinePrompt(prompt: string): Promise<string> {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
+    // Write prompt directly to stdout and read from stdin using a
+    // temporary readline that does not interfere with an existing one.
     return new Promise((resolve) => {
-      rl.question(prompt, (answer) => {
-        rl.close();
-        resolve(answer.trim());
-      });
+      process.stdout.write(prompt);
+      const onData = (chunk: Buffer) => {
+        process.stdin.removeListener('data', onData);
+        process.stdin.pause();
+        resolve(chunk.toString().trim());
+      };
+      process.stdin.resume();
+      process.stdin.once('data', onData);
     });
   }
 

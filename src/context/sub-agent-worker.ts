@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'worker_threads';
 import OpenAI from 'openai';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { SubAgentRequest, SubAgentResult } from './sub-agent-manager.js';
 
 const request: SubAgentRequest = workerData;
@@ -14,6 +15,7 @@ async function run(): Promise<void> {
   try {
     const client = new OpenAI({
       baseURL: request.proxyUrl || process.env.LITELLM_PROXY_URL || 'http://localhost:4000',
+      apiKey: request.apiKey || process.env.LITELLM_API_KEY || undefined,
     });
 
     const systemPrompt = buildSystemPrompt(request);
@@ -51,7 +53,7 @@ async function run(): Promise<void> {
 
     for (const fileOp of [...created, ...modified]) {
       if (request.permissions.allow_write === 'auto' || request.permissions.allow_write === 'ask') {
-        const dir = fileOp.path.substring(0, fileOp.path.lastIndexOf('/'));
+        const dir = fileOp.path.substring(0, Math.max(fileOp.path.lastIndexOf('/'), fileOp.path.lastIndexOf(path.sep)));
         if (dir && !fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }

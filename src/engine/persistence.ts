@@ -146,10 +146,10 @@ export class PersistenceManager {
     this.safeRename(tmpPath, filePath);
   }
 
-  loadHeartbeat(): typeof undefined | {
+  loadHeartbeat(): {
     timestamp: number;
     phase: string;
-  } {
+  } | undefined {
     const filePath = path.join(this.stateDir, 'heartbeat.json');
     if (!fs.existsSync(filePath)) return undefined;
     try {

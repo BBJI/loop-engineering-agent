@@ -1,4 +1,5 @@
 import { Worker } from 'worker_threads';
+import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { Phase } from '../utils/constants.js';
@@ -31,6 +32,7 @@ export interface SubAgentRequest {
   };
   model?: string;
   proxyUrl?: string;
+  apiKey?: string;
 }
 
 export interface SubAgentResult {
@@ -61,16 +63,27 @@ export class SubAgentManager {
   private workers: Map<string, Worker> = new Map();
   private model?: string;
   private proxyUrl?: string;
+  private apiKey?: string;
 
-  configure(model: string, proxyUrl: string): void {
+  configure(model: string, proxyUrl: string, apiKey?: string): void {
     this.model = model;
     this.proxyUrl = proxyUrl;
+    this.apiKey = apiKey;
   }
 
   async executeTask(request: SubAgentRequest): Promise<SubAgentResult> {
     if (!request.model) request.model = this.model;
     if (!request.proxyUrl) request.proxyUrl = this.proxyUrl;
-    const workerPath = path.join(__dirname, 'sub-agent-worker.js');
+    if (!request.apiKey) request.apiKey = this.apiKey;
+
+    // Resolve worker path: prefer .js (compiled), fallback to .ts (dev mode with tsx)
+    let workerPath = path.join(__dirname, 'sub-agent-worker.js');
+    if (!fs.existsSync(workerPath)) {
+      const tsPath = path.join(__dirname, 'sub-agent-worker.ts');
+      if (fs.existsSync(tsPath)) {
+        workerPath = tsPath;
+      }
+    }
 
     const workerOptions: Record<string, unknown> = {
       workerData: request,
@@ -84,18 +97,25 @@ export class SubAgentManager {
       worker.terminate();
     }, request.constraints.timeout_ms);
 
+    let resolved = false;
+
     return new Promise((resolve) => {
-      worker.on('message', (result: SubAgentResult) => {
+      const resolveOnce = (result: SubAgentResult) => {
+        if (resolved) return;
+        resolved = true;
         clearTimeout(timeout);
         this.workers.delete(request.task_id);
-        worker.terminate();
         resolve(result);
+      };
+
+      worker.on('message', (result: SubAgentResult) => {
+        worker.terminate();
+        resolveOnce(result);
       });
 
       worker.on('error', (err: Error) => {
-        clearTimeout(timeout);
-        this.workers.delete(request.task_id);
-        resolve({
+        worker.terminate();
+        resolveOnce({
           task_id: request.task_id,
           status: 'failed',
           summary: { description: `Worker error: ${err.message}`, files_modified: [], files_created: [], files_deleted: [], tests_passed: 0, tests_failed: 0 },
@@ -105,14 +125,21 @@ export class SubAgentManager {
       });
 
       worker.on('exit', (code) => {
-        clearTimeout(timeout);
-        this.workers.delete(request.task_id);
         if (code !== 0) {
-          resolve({
+          resolveOnce({
             task_id: request.task_id,
             status: 'failed',
             summary: { description: `Worker exited with code ${code}`, files_modified: [], files_created: [], files_deleted: [], tests_passed: 0, tests_failed: 0 },
             error: { type: 'execution_error', message: `Exit code ${code}`, retry_count: 0 },
+            audit: { model_calls: 0, total_tokens: 0, total_cost: 0, duration_ms: 0 },
+          });
+        } else {
+          // Exit code 0 without message — resolve with empty failure
+          resolveOnce({
+            task_id: request.task_id,
+            status: 'failed',
+            summary: { description: 'Worker exited without sending result', files_modified: [], files_created: [], files_deleted: [], tests_passed: 0, tests_failed: 0 },
+            error: { type: 'execution_error', message: 'No result from worker', retry_count: 0 },
             audit: { model_calls: 0, total_tokens: 0, total_cost: 0, duration_ms: 0 },
           });
         }

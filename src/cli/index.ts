@@ -251,7 +251,7 @@ program
     const config = loadConfig(path.resolve(opts.project));
     const llmClient = new LLMClient(config);
     const skillEngine = new SkillEngine(
-      config.skills.directory.replace('~', process.env.HOME || '~'),
+      config.skills.directory.replace('~', process.env.HOME || process.env.USERPROFILE || '~'),
       llmClient
     );
 

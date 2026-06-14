@@ -35,6 +35,13 @@ export function saveConfig(projectDir: string, config: Config): void {
 
   const tmpPath = configPath + '.tmp';
   fs.writeFileSync(tmpPath, content, 'utf-8');
+
+  // Atomic write: remove target first (renameSync fails on Windows if target exists)
+  try {
+    fs.unlinkSync(configPath);
+  } catch {
+    // File may not exist, that's fine
+  }
   fs.renameSync(tmpPath, configPath);
 }
 

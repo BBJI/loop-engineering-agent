@@ -76,9 +76,10 @@ export class WorkflowEngine {
       id: `wf-${Date.now()}`,
       projectDir,
       description,
-      phases: PHASES.map((name) => ({
+      phases: PHASES.map((name, index) => ({
         name,
-        status: 'pending' as PhaseStatus,
+        status: index === 0 ? 'running' as PhaseStatus : 'pending' as PhaseStatus,
+        startedAt: index === 0 ? new Date().toISOString() : undefined,
         artifacts: [],
         gatePassed: false,
       })),

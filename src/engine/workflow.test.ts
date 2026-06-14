@@ -13,7 +13,8 @@ describe('WorkflowEngine', () => {
     expect(state.status).toBe('running');
     expect(state.currentPhaseIndex).toBe(0);
     expect(state.phases[0].name).toBe('req');
-    expect(state.phases[0].status).toBe('pending');
+    expect(state.phases[0].status).toBe('running');
+    expect(state.phases[0].startedAt).toBeDefined();
   });
 
   test('完成当前阶段后可以推进', () => {

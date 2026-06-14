@@ -149,6 +149,7 @@ export class AutonomousLoop extends EventEmitter {
   private async executeDevPhase(spinner: any): Promise<void> {
     const state = this.engine.getState();
     let anySuccess = false;
+    const allArtifacts: string[] = [];
 
     for (let iter = 1; iter <= state.maxIterations; iter++) {
       this.iteration = iter;
@@ -159,12 +160,7 @@ export class AutonomousLoop extends EventEmitter {
         task_description: state.description,
         skill_name: 'dev-skill',
         skill_content: this.skillEngine.getSkill('dev-skill')?.content || '',
-        context: {
-          requirement_summary: this.contextManager.getSummary('req') as any,
-          design_summary: this.contextManager.getSummary('design') as any,
-          review_summary: this.contextManager.getSummary('review') as any,
-          task_breakdown: this.contextManager.getSummary('task') as any,
-        },
+        context: this.buildSubAgentContext(['req', 'design', 'review', 'task']),
         files: [],
         permissions: {
           allow_write: this.config.permissions.allow_write,
@@ -182,6 +178,7 @@ export class AutonomousLoop extends EventEmitter {
 
       if (result.status === 'completed') {
         anySuccess = true;
+        allArtifacts.push(...result.summary.files_created, ...result.summary.files_modified);
         spinner.succeed(ui.success(`开发迭代 ${iter} 完成`));
         console.log(ui.agent(`子代理: ${result.summary.description}`));
       } else {
@@ -192,7 +189,9 @@ export class AutonomousLoop extends EventEmitter {
     }
 
     if (anySuccess) {
-      this.engine.completePhase([]);
+      const uniqueArtifacts = [...new Set(allArtifacts)];
+      this.engine.completePhase(uniqueArtifacts);
+      this.emit('phase:complete', { phase: 'dev' as Phase, artifacts: uniqueArtifacts });
     } else {
       throw new Error('所有开发迭代均失败');
     }
@@ -202,7 +201,7 @@ export class AutonomousLoop extends EventEmitter {
     const state = this.engine.getState();
     const maxBugRounds = this.config.workflow.convergence.max_bug_rounds;
 
-    for (let round = 1; round <= maxBugRounds + 1; round++) {
+    for (let round = 1; round <= maxBugRounds; round++) {
       spinner.start(`测试轮次 ${round}...`);
 
       const testRequest: SubAgentRequest = {
@@ -210,10 +209,7 @@ export class AutonomousLoop extends EventEmitter {
         task_description: `Run tests and report bugs for: ${state.description}`,
         skill_name: 'test-skill',
         skill_content: this.skillEngine.getSkill('test-skill')?.content || '',
-        context: {
-          requirement_summary: this.contextManager.getSummary('req') as any,
-          design_summary: this.contextManager.getSummary('design') as any,
-        },
+        context: this.buildSubAgentContext(['req', 'design']),
         files: [],
         permissions: {
           allow_write: 'auto',
@@ -229,8 +225,26 @@ export class AutonomousLoop extends EventEmitter {
 
       const result = await this.subAgentManager.executeTask(testRequest);
 
+      // Handle failed/timeout sub-agent results
+      if (result.status === 'failed' || result.status === 'timeout') {
+        const bugsFound = result.summary.tests_failed;
+        const bugsFixed = 0;
+        this.engine.recordBugRound(bugsFound, bugsFixed);
+        this.emit('bug:found', { round, count: bugsFound });
+        this.emit('bug:fixed', { round, count: bugsFixed });
+        spinner.fail(ui.fail(`测试轮次 ${round}: 子代理执行失败 - ${result.error?.message || 'unknown error'}`));
+
+        if (this.engine.shouldEscalate()) {
+          console.log(ui.warn('测试持续失败，需要人工介入'));
+          this.engine.setStatus('failed');
+          return;
+        }
+        continue;
+      }
+
+      // For completed results, tests_failed = bugs found, tests_passed = bugs fixed
       const bugsFound = result.summary.tests_failed;
-      const bugsFixed = result.status === 'completed' ? result.summary.tests_passed : 0;
+      const bugsFixed = result.summary.tests_passed;
 
       this.engine.recordBugRound(bugsFound, bugsFixed);
       this.emit('bug:found', { round, count: bugsFound });
@@ -240,6 +254,7 @@ export class AutonomousLoop extends EventEmitter {
       if (this.engine.isStable()) {
         console.log(ui.success('迭代稳定，无新 Bug'));
         this.engine.completePhase([]);
+        this.emit('phase:complete', { phase: 'test' as Phase, artifacts: [] });
         return;
       }
 
@@ -250,7 +265,9 @@ export class AutonomousLoop extends EventEmitter {
       }
     }
 
-    this.engine.completePhase([]);
+    // Exhausted all rounds without converging
+    console.log(ui.warn(`已达到最大测试轮次 (${maxBugRounds})，Bug 未收敛`));
+    this.engine.setStatus('failed');
   }
 
   private extractArtifacts(result: string): string[] {
@@ -263,5 +280,24 @@ export class AutonomousLoop extends EventEmitter {
       }
     }
     return artifacts;
+  }
+
+  private buildSubAgentContext(phases: Phase[]): Record<string, Record<string, unknown>> {
+    const context: Record<string, Record<string, unknown>> = {};
+    const keyMap: Record<Phase, string> = {
+      req: 'requirement_summary',
+      design: 'design_summary',
+      review: 'review_summary',
+      task: 'task_breakdown',
+      dev: 'dev_summary',
+      test: 'test_summary',
+    };
+    for (const phase of phases) {
+      const summary = this.contextManager.getSummary(phase);
+      if (summary) {
+        context[keyMap[phase]] = summary as unknown as Record<string, unknown>;
+      }
+    }
+    return context;
   }
 }

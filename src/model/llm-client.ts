@@ -31,6 +31,7 @@ export class LLMClient {
   private client: OpenAI;
   private config: Config;
   private dailySpend = 0;
+  private dailySpendDate = new Date().toISOString().slice(0, 10);
   private callCount = 0;
 
   constructor(config: Config) {
@@ -138,8 +139,12 @@ export class LLMClient {
     this.dailySpend += cost;
     this.callCount++;
 
+    const tokensDisplay = tokens.total >= 1000
+      ? `${(tokens.total / 1000).toFixed(1)}k`
+      : `${tokens.total}`;
+
     console.log(ui.model(
-      `${model} | ${(durationMs / 1000).toFixed(1)}s | ${tokens.total}k tokens | $${cost.toFixed(4)} | chat.completion`
+      `${model} | ${(durationMs / 1000).toFixed(1)}s | ${tokensDisplay} tokens | $${cost.toFixed(4)} | chat.completion`
     ));
 
     return { content, reasoning, model, tokens, cost, durationMs };
@@ -187,6 +192,13 @@ export class LLMClient {
   }
 
   private checkBudget(): void {
+    // Reset daily spend if the day has changed
+    const today = new Date().toISOString().slice(0, 10);
+    if (today !== this.dailySpendDate) {
+      this.dailySpend = 0;
+      this.dailySpendDate = today;
+    }
+
     const budget = this.config.models.cost_budget;
     if (this.dailySpend >= budget.daily_limit) {
       throw new Error(
@@ -195,9 +207,9 @@ export class LLMClient {
     }
   }
 
-  private estimateCost(model: string, tokens: { total: number }): number {
+  private estimateCost(model: string, tokens: { prompt: number; completion: number; total: number }): number {
     const pricing = MODEL_PRICING[model] || { input: 0.001, output: 0.002 };
-    return tokens.total * pricing.output / 1000;
+    return (tokens.prompt * pricing.input + tokens.completion * pricing.output) / 1000;
   }
 
   getStats() {

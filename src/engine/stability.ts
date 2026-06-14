@@ -59,6 +59,7 @@ export class StabilityGuard {
     if (mb >= MEMORY_THRESHOLDS.fatal) {
       const state = this.getState();
       this.persistence.saveCheckpoint(state);
+      this.stop(); // Clean up timers before exit
       console.error(`\n[FATAL] 内存超过 ${MEMORY_THRESHOLDS.fatal}MB，保存检查点并退出。使用 lea resume 恢复。`);
       process.exit(1);
     }

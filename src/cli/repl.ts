@@ -40,6 +40,7 @@ export class REPL {
   private permissionManager?: PermissionManager;
   private consecutiveCtrlC = 0;
   private ctrlCTimer: ReturnType<typeof setTimeout> | null = null;
+  private processing = false;
 
   constructor(private session: REPLSession) {
     this.rl = readline.createInterface({
@@ -115,7 +116,7 @@ export class REPL {
   private initComponents(): void {
     this.contextManager = new ContextManager(this.session.llmClient, this.session.persistence);
     this.subAgentManager = new SubAgentManager();
-    this.subAgentManager.configure(this.session.config.models.default, this.session.config.litellm.proxy_url);
+    this.subAgentManager.configure(this.session.config.models.default, this.session.config.litellm.proxy_url, this.session.config.litellm.api_key);
     this.skillEngine = new SkillEngine(
       this.session.config.skills.directory.replace('~', process.env.HOME || process.env.USERPROFILE || '~'),
       this.session.llmClient
@@ -130,10 +131,21 @@ export class REPL {
   }
 
   private async handleInput(input: string): Promise<void> {
-    if (input.startsWith('/')) {
-      await this.handleCommand(input);
-    } else {
-      await this.handleChat(input);
+    if (this.processing) {
+      console.log(ui.warn('正在处理中，请等待...'));
+      this.showPrompt();
+      return;
+    }
+
+    this.processing = true;
+    try {
+      if (input.startsWith('/')) {
+        await this.handleCommand(input);
+      } else {
+        await this.handleChat(input);
+      }
+    } finally {
+      this.processing = false;
     }
     this.showPrompt();
   }
@@ -288,7 +300,7 @@ export class REPL {
       engine: this.engine,
       onModelSwitch: (oldModel: string, newModel: string) => {
         this.statusBar.update({ model: newModel });
-        this.subAgentManager?.configure(newModel, this.session.config.litellm.proxy_url);
+        this.subAgentManager?.configure(newModel, this.session.config.litellm.proxy_url, this.session.config.litellm.api_key);
         console.log(ui.model(`子代理模型已同步: ${newModel}`));
       },
     };
