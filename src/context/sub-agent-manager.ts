@@ -1,7 +1,11 @@
 import { Worker } from 'worker_threads';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import type { Phase } from '../utils/constants.js';
 import type { PermissionAction } from '../model/types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface SubAgentRequest {
   task_id: string;
