@@ -1,6 +1,6 @@
 {
   "name": "@niuzhiwen/loop-engineering-agent",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Autonomous coding agent based on Loop Engineering principles — convergent feedback loop from requirements to delivery",
   "type": "module",
   "main": "dist/index.js",
@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/",
+    "skills/",
     "CLAUDE.md",
     "README.md",
     "LICENSE"

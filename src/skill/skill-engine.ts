@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import type { LLMClient } from '../model/llm-client.js';
 import type { Phase } from '../utils/constants.js';
 
@@ -25,24 +26,44 @@ export class SkillEngine {
   loadSkills(): SkillDefinition[] {
     this.skills.clear();
 
-    if (!fs.existsSync(this.skillsDir)) {
-      return [];
+    // 1. Load built-in skills from the package's skills/ directory
+    const builtinDir = this.getBuiltinSkillsDir();
+    if (builtinDir && fs.existsSync(builtinDir)) {
+      this.loadSkillsFromDir(builtinDir);
     }
 
-    const entries = fs.readdirSync(this.skillsDir, { withFileTypes: true });
+    // 2. Load user skills (override built-in ones with same name)
+    if (this.skillsDir && fs.existsSync(this.skillsDir)) {
+      this.loadSkillsFromDir(this.skillsDir);
+    }
+
+    return Array.from(this.skills.values());
+  }
+
+  private getBuiltinSkillsDir(): string {
+    try {
+      // Resolve: <pkg_root>/dist/skill/skill-engine.js -> <pkg_root>/skills/
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      return path.resolve(__dirname, '..', '..', 'skills');
+    } catch {
+      return '';
+    }
+  }
+
+  private loadSkillsFromDir(dir: string): void {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
 
-      const skillFile = path.join(this.skillsDir, entry.name, 'SKILL.md');
+      const skillFile = path.join(dir, entry.name, 'SKILL.md');
       if (!fs.existsSync(skillFile)) continue;
 
       const raw = fs.readFileSync(skillFile, 'utf-8');
       const skill = this.parseSkillMarkdown(raw, skillFile, entry.name);
       this.skills.set(skill.name, skill);
     }
-
-    return Array.from(this.skills.values());
   }
 
   private parseSkillMarkdown(
