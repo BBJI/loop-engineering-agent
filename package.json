@@ -1,6 +1,6 @@
 {
   "name": "@niuzhiwen/loop-engineering-agent",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Autonomous coding agent based on Loop Engineering principles — convergent feedback loop from requirements to delivery",
   "type": "module",
   "main": "dist/index.js",
@@ -16,6 +16,10 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli/index.ts",
+    "dev:watch": "tsx watch src/cli/index.ts",
+    "debug": "node --inspect-brk node_modules/tsx/dist/cli.mjs src/cli/index.ts",
+    "link": "npm run build && npm link",
+    "unlink": "npm unlink -g @niuzhiwen/loop-engineering-agent",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
