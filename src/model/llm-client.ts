@@ -84,6 +84,11 @@ export class LLMClient {
     }
 
     const durationMs = Date.now() - start;
+
+    if (!content) {
+      console.log(ui.warn('模型返回了空响应，请检查 API 地址是否为 OpenAI 兼容端点'));
+    }
+
     const tokens = { prompt: 0, completion: 0, total: 0 };
     const cost = this.estimateCost(model, tokens);
 
