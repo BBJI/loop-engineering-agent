@@ -12,6 +12,7 @@ export interface ModelCallOptions {
 
 export interface ModelCallResult {
   content: string;
+  reasoning: string;
   model: string;
   tokens: { prompt: number; completion: number; total: number };
   cost: number;
@@ -58,6 +59,8 @@ export class LLMClient {
     const start = Date.now();
     let content = '';
 
+    let reasoning = '';
+
     if (options.stream) {
       const stream = await this.client.chat.completions.create({
         model,
@@ -67,10 +70,26 @@ export class LLMClient {
         stream: true,
       });
 
+      let inReasoning = false;
       for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content || '';
-        content += delta;
-        process.stdout.write(delta);
+        const delta = chunk.choices[0]?.delta as any;
+        // Handle reasoning_content for reasoning models (e.g. glm-5.1, deepseek-r1)
+        if (delta?.reasoning_content) {
+          if (!inReasoning) {
+            process.stdout.write(ui.dim('思考: '));
+            inReasoning = true;
+          }
+          reasoning += delta.reasoning_content;
+          process.stdout.write(ui.dim(delta.reasoning_content));
+        }
+        if (delta?.content) {
+          if (inReasoning) {
+            process.stdout.write('\n\n');
+            inReasoning = false;
+          }
+          content += delta.content;
+          process.stdout.write(delta.content);
+        }
       }
       process.stdout.write('\n');
     } else {
@@ -80,12 +99,20 @@ export class LLMClient {
         max_tokens: options.maxTokens,
         temperature: options.temperature,
       });
-      content = response.choices[0]?.message?.content || '';
+      const msg = response.choices[0]?.message as any;
+      reasoning = msg?.reasoning_content || '';
+      content = msg?.content || '';
+      if (reasoning) {
+        process.stdout.write(ui.dim(`思考: ${reasoning}\n\n`));
+      }
+      if (content) {
+        process.stdout.write(content + '\n');
+      }
     }
 
     const durationMs = Date.now() - start;
 
-    if (!content) {
+    if (!content && !reasoning) {
       console.log(ui.warn('模型返回了空响应，请检查 API 地址是否为 OpenAI 兼容端点'));
     }
 
@@ -99,7 +126,7 @@ export class LLMClient {
       `${model} | ${(durationMs / 1000).toFixed(1)}s | ${tokens.total}k tokens | $${cost.toFixed(4)} | chat.completion`
     ));
 
-    return { content, model, tokens, cost, durationMs };
+    return { content, reasoning, model, tokens, cost, durationMs };
   }
 
   async chatWithRetry(
